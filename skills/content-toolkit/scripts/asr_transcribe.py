@@ -17,8 +17,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (HttpError, deep_get, http_download, http_json, now_str, store_load,
-                    store_save, load_config)
+from common import (HttpError, deep_get, extract_video_id, http_download, http_json,
+                    now_str, store_load, store_save, load_config)
+import re
 
 ERROR_HINTS = {
     "InvalidFile.DownloadFailed": "阿里云下载不了该直链（可能有防盗链/已过期）。换一个解析接口重新拿直链，或下载到本地后手动走通义听悟。",
@@ -86,6 +87,54 @@ def save_result(cfg, v, result_json):
     return len(text)
 
 
+def reuse_library_transcripts(cfg, vids):
+    """config.transcript_library 指向导出线素材库根目录时，按 aweme_id 复用已有逐字稿。"""
+    lib = (cfg.get("transcript_library") or "").strip()
+    if not lib:
+        return 0
+    lib = Path(lib).expanduser()
+    if not lib.is_dir():
+        print(f"[提示] transcript_library 目录不存在：{lib}")
+        return 0
+    # 索引：博主目录/links.json → {aweme_id: (博主目录, post_id)}
+    vid_index = {}
+    for links_file in lib.glob("*/links.json"):
+        try:
+            links = json.loads(links_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for pid, url in links.items():
+            aid = extract_video_id(url or "")
+            if aid and aid not in vid_index:
+                vid_index[aid] = (links_file.parent, pid)
+    reused = 0
+    for v in vids.values():
+        if v.get("asr", {}).get("status") == "done":
+            continue
+        aid = extract_video_id(v.get("share_url") or v.get("page_url") or "")
+        hit = vid_index.get(aid) if aid else None
+        if not hit:
+            continue
+        bdir, pid = hit
+        mds = list(bdir.glob(f"???_{pid}_*.md")) or list(bdir.glob(f"*_{pid}_*.md"))
+        if not mds:
+            continue
+        text = mds[0].read_text(encoding="utf-8")
+        body = re.sub(r"^>.*$|^#+\s.*$|^---$|^$", "", text, flags=re.M).strip()
+        if len(body) < 50:
+            continue
+        v["transcript"] = body
+        v["transcript_file"] = str(mds[0])
+        v["asr"] = {"status": "done", "source": f"biji-library:{mds[0].parent.name}",
+                    "duration_seconds": None, "transcript_chars": len(body)}
+        v["stage"] = "transcribed"
+        reused += 1
+        print(f"  [复用逐字稿] {v.get('title') or aid} ← {mds[0].parent.name}/（跳过转写）")
+    if reused:
+        store_save(cfg, {"videos": vids, "updated_at": now_str()})
+    return reused
+
+
 def main():
     ap = argparse.ArgumentParser(description="Paraformer 批量转写")
     ap.add_argument("--config", help="指定 config.json 路径")
@@ -96,13 +145,11 @@ def main():
 
     cfg = load_config(args.config)
     d = cfg.get("dashscope", {})
-    key = (d.get("api_key") or "").strip()
-    if not key:
-        raise SystemExit("[错误] 缺少 DashScope API Key：填写 config.json 的 dashscope.api_key，"
-                         "或设置环境变量 DASHSCOPE_API_KEY。（在百炼控制台 → API-KEY 创建，sk- 开头）")
-
     store = store_load(cfg)
     vids = store["videos"]
+
+    # 0) 逐字稿库复用：导出线（Get笔记）已转写过的视频，按 aweme_id 匹配直接复用，省转写费
+    reused = reuse_library_transcripts(cfg, vids)
 
     # 待处理：有直链、未完成转写、未报永久错误
     pending = {}
@@ -118,8 +165,14 @@ def main():
             continue
         pending[vid] = v
     if not pending:
-        print("[完成] 没有待转写条目（无直链或缺转写任务的已在前面步骤提示）。")
+        print("[完成] 没有待转写条目（库复用 %d 条已生效，其余均已完成）。接着跑 merge_output.py 合并。" % reused)
         return
+
+    key = (d.get("api_key") or "").strip()
+    if not key:
+        raise SystemExit("[提示] 未配置 DashScope API Key，跳过在线转写（库复用的 "
+                         f"{reused} 条已完成，还有 {len(pending)} 条待转写）。"
+                         "需要时再填 key：百炼控制台 → API-KEY（sk- 开头）")
 
     # 阶段一：提交（没有 task_id 的）
     for vid, v in pending.items():
@@ -177,8 +230,10 @@ def main():
         store_save(cfg, store)
         alive = [v for v in pending.values() if v["asr"].get("status") in ("submitted", "running")]
         if alive:
-            print(f"  … {len(alive)} 个任务进行中，{interval}s 后再查")
-            time.sleep(interval)
+            first = min(5, interval)
+            print(f"  … {len(alive)} 个任务进行中，{first}s 后再查")
+            time.sleep(first)
+            interval = int(d.get("poll_interval_seconds", 10))
 
     store["updated_at"] = now_str()
     store_save(cfg, store)

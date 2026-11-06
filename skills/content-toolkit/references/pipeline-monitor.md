@@ -17,6 +17,8 @@ Monid 采集(数据+链接) ──► 去水印解析(拿视频直链) ──►
 
 三条入口可混用；统一写 `<workspace>/videos.json`（默认 `~/VideoMonitor`），阶段 `collected→parsed→transcribed→merged`，全幂等。
 
+性能与省钱设计：去水印解析默认 3 路并发（`parser.concurrency` 可调 1-4）；`transcript_library` 指向导出线素材库根目录时，转写前先按 aweme_id 复用已有逐字稿（asr.source 会标 `biji-library:*`）；Monid 调用自动记台账 `.cost_log.json`。
+
 ## 外部依赖
 
 - **Monid**（api.monid.ai，`monid_live_` key）：工具网关，$0.0012/次

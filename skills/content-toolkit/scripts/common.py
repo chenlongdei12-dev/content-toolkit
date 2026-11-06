@@ -32,6 +32,38 @@ DEFAULT_FIELD_MAP = {
 }
 
 
+def log_cost(cfg, endpoint, cost):
+    """Monid 花费台账：追加到 workspace/.cost_log.json。"""
+    try:
+        if not cost:
+            return
+        p = Path(cfg.get("workspace", "~/VideoMonitor")).expanduser() / ".cost_log.json"
+        ledger = []
+        if p.exists():
+            try:
+                ledger = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                ledger = []
+        ledger.append({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "endpoint": endpoint,
+                       "cost": cost})
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(ledger, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def cost_total(cfg):
+    """返回 (总花费, 条数)。"""
+    try:
+        p = Path(cfg.get("workspace", "~/VideoMonitor")).expanduser() / ".cost_log.json"
+        if not p.exists():
+            return 0.0, 0
+        ledger = json.loads(p.read_text(encoding="utf-8"))
+        return sum(x.get("cost", 0) for x in ledger), len(ledger)
+    except Exception:
+        return 0.0, 0
+
+
 def monid_run(cfg, provider, endpoint, body, max_wait=180):
     """调用 Monid 工具网关：POST /v1/run 提交，READY/RUNNING 时轮询 /v1/runs/{id}。
     返回完整 run 对象（结果在 output 字段；成本在 cost）。"""
@@ -192,6 +224,14 @@ def extract_video_id(url):
         if m:
             return m.group(1)
     return None
+
+
+def extract_video_id(url_or_text):
+    """从链接或文本里抽抖音视频 aweme_id（video/123... 或 modal_id=123...）。"""
+    m = re.search(r"(?:iesdouyin|douyin)\.com/(?:\S*?/)?video/(\d{15,})", url_or_text or "")
+    if not m:
+        m = re.search(r"modal_id=(\d{15,})", url_or_text or "")
+    return m.group(1) if m else None
 
 
 def is_direct_media_url(url):

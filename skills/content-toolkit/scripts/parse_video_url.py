@@ -102,16 +102,17 @@ def main():
         return
 
     ok = fail = skip = 0
-    for v in targets:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def handle(v):
+        """返回 (kind, vid, info)；kind ∈ direct/ok/fail/error/not_configured"""
         vid = v["video_id"]
         url = v.get("share_url") or v.get("page_url")
         if is_direct_media_url(url):
             v["video_file_url"] = url
             v["video_file_source"] = "direct"
             v["stage"] = "parsed"
-            skip += 1
-            print(f"  [跳过解析·已是直链] {vid}")
-            continue
+            return "direct", vid, None
         try:
             media, status, extra = parse_one(cfg, url)
             if status in ("monid", "http", "http_scan"):
@@ -121,20 +122,33 @@ def main():
                 v["stage"] = "parsed"
                 if extra is not None:
                     backfill(v, extra, cfg.get("monid", {}).get("field_map") or DEFAULT_FIELD_MAP)
-                ok += 1
-                print(f"  [解析成功] {vid} ← {status}")
-            elif status == "not_configured":
-                print("[跳过] parser 未配置且 monid 未启用：请在 config.json 的 monid 段填 token 并 enabled=true（走 Monid 去水印），或在 parser.url_template 填第三方接口。")
-                break
-            else:
-                v["parse_error"] = str(media)[:300]
-                fail += 1
-                print(f"  [解析失败] {vid}：响应里没有音视频直链，已把响应存入 parse_error 字段")
+                return "ok", vid, status
+            if status == "not_configured":
+                return "not_configured", vid, None
+            v["parse_error"] = str(media)[:300]
+            return "fail", vid, str(media)[:120]
         except Exception as e:
             v["parse_error"] = str(e)[:300]
-            fail += 1
-            print(f"  [解析出错] {vid}：{e}")
-        time.sleep(0.8)  # 控制频率（Monid/解析接口可承受）
+            return "error", vid, str(e)[:120]
+
+    workers = max(1, min(4, int(cfg.get("parser", {}).get("concurrency", 3))))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for kind, vid, info in pool.map(handle, targets):
+            if kind == "direct":
+                skip += 1
+                print(f"  [跳过解析·已是直链] {vid}")
+            elif kind == "ok":
+                ok += 1
+                print(f"  [解析成功] {vid} ← {info}")
+            elif kind == "not_configured":
+                print("[跳过] parser 未配置且 monid 未启用：请在 config.json 的 monid 段填 token 并 enabled=true（走 Monid 去水印），或在 parser.url_template 填第三方接口。")
+                break
+            elif kind == "fail":
+                fail += 1
+                print(f"  [解析失败] {vid}：{info}")
+            else:
+                fail += 1
+                print(f"  [解析出错] {vid}：{info}")
 
     store_save(cfg, store)
     print(f"[完成] 直链跳过 {skip} / 解析成功 {ok} / 失败 {fail}。提醒：直链有时效，尽快执行步骤3转写。")

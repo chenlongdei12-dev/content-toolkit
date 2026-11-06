@@ -16,11 +16,10 @@
 
 1. **把这个文件夹整个发给你的 AI**，对它说：
    > 帮我安装这个工具包，按 INSTALL.md 操作
-2. AI 会跑自检，然后引导你填两个 key（跟截图走就行）：
-   - **阿里云百炼 Key**（语音转文字用）：https://bailian.console.aliyun.com 注册 → 左侧「API-KEY」→ 创建（sk- 开头）。新用户有免费额度
-   - **Monid Key**（抖音数据用）：https://app.monid.ai 注册 → Access / API Keys → 创建（monid_live_ 开头）。新号送 $1 额度，够抓几百条
-3. 拿一条抖音视频链接试一下：
-   > 用 content-toolkit 把这条视频转成逐字稿 https://v.douyin.com/xxxxx/
+2. **先零 key 体验**（不用注册任何东西）：登录你的得到大脑（Get笔记）账号，AI 就能把你订阅博主的全部逐字稿导出来
+3. **有需要再补 key 解锁**「丢链接→出稿」的监控流水线（AI 会引导，各 2 分钟注册，都有免费额度）：
+   - **阿里云百炼 Key**（语音转文字）：https://bailian.console.aliyun.com → 左侧「API-KEY」→ 创建（sk- 开头）
+   - **Monid Key**（抖音数据）：https://app.monid.ai → Access / API Keys → 创建（monid_live_ 开头，送 $1）
 
 完成 ✅ 之后的所有用法，直接用大白话跟你的 AI 说就行（它在 SKILL.md 里都学了）。
 
@@ -34,6 +33,10 @@
 | 社媒助手插件 | 有免费额度 | 批量导数据用 |
 
 粗算：**处理 100 条视频 ≈ $0.25 + 转写几块钱人民币**。
+
+## 怎么升级
+
+把新版文件夹再发一次给 AI，说「按 INSTALL.md 升级 content-toolkit」（会保留你的 config.json 和所有数据）。或 git 用户直接 `git pull`。
 
 ## 常见问题
 

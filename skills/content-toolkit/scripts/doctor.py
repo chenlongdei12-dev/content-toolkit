@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""环境自检 + 凭据验证（content-toolkit 第一条命令，全部零成本探测）。
+"""环境自检（MVP 分级引导）：先看零 key 能用什么，再按需解锁，不吓唬新手。
 
-用法：python3 doctor.py [--fix]
-输出 ✅/❌ 清单和对应修复方法；--fix 时直接打印可粘贴的修复命令。
+用法：python3 doctor.py
+原则：第一次使用只需要最少的 key——导出流水线零 key 可用（登录得到大脑即可）；
+监控流水线才需要 百炼+Monid 两个 key。全部探测零成本。
 """
 import json
 import sys
@@ -11,119 +12,107 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import EXAMPLE_CONFIG_PATH, CONFIG_PATH, load_config
+from common import CONFIG_PATH, EXAMPLE_CONFIG_PATH, cost_total, load_config
 
-PY_URL = "https://www.python.org/downloads/"
 DASHSCOPE_URL = "https://bailian.console.aliyun.com/?tab=model#/api-key"
 MONID_URL = "https://app.monid.ai/access/api-keys"
 
-results = []
 
-
-def check(name, ok, detail="", fix=None):
-    results.append((name, ok, detail, fix))
-
-
-def http(url, headers=None, timeout=12, method="GET", body=None):
-    req = urllib.request.Request(url, headers=headers or {}, method=method,
-                                 data=(json.dumps(body).encode() if isinstance(body, dict) else body))
+def http(url, headers=None, timeout=12, method="GET"):
+    req = urllib.request.Request(url, headers=headers or {}, method=method)
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.status, r.read().decode("utf-8", "replace")
+        return r.read().decode("utf-8", "replace")
+
+
+def reachable(url):
+    try:
+        http(url, timeout=8)
+        return True
+    except urllib.error.HTTPError:
+        return True  # 有 HTTP 响应 = 网络通
+    except Exception:
+        return False
 
 
 def main():
-    fix_mode = "--fix" in sys.argv
-
-    # 1. Python 版本
-    ok = sys.version_info >= (3, 9)
-    check("Python ≥ 3.9", ok, sys.version.split()[0],
-          None if ok else f"安装新版 Python：{PY_URL}（macOS 可 brew install python）")
-
-    # 2. 配置文件
     cfg = load_config()
-    has_cfg = CONFIG_PATH.exists()
-    check("config.json 已创建", has_cfg,
-          str(CONFIG_PATH),
-          None if has_cfg else f"cp {EXAMPLE_CONFIG_PATH.name} config.json 后填入你的 key（教程见 README）")
+    lines = []
+    lines.append("\n===== content-toolkit 自检 =====")
 
-    # 3. DashScope key（零成本验证：查一个不存在的任务号，鉴权过即 key 有效）
-    key = (cfg.get("dashscope", {}).get("api_key") or "").strip()
-    if not key:
-        check("阿里云百炼 Key", False, "未填写", f"到 {DASHSCOPE_URL} 创建（sk- 开头），填入 config.json 的 dashscope.api_key")
-    else:
-        try:
-            http("https://dashscope.aliyuncs.com/api/v1/tasks/00000000-0000-0000-0000-000000000000",
-                 headers={"Authorization": f"Bearer {key}"}, method="POST")
-            check("阿里云百炼 Key", True, "有效（sk-…%s）" % key[-4:])
-        except urllib.error.HTTPError as e:
-            if e.code in (400, 404):
-                check("阿里云百炼 Key", True, "有效（sk-…%s）" % key[-4:])
-            elif e.code == 401:
-                check("阿里云百炼 Key", False, "无效（401）",
-                      f"确认是百炼控制台的 sk- 开头 Key（不是阿里云 RAM AccessKey）：{DASHSCOPE_URL}")
-            else:
-                check("阿里云百炼 Key", False, f"HTTP {e.code}", "看 detail 或稍后重试")
-        except Exception as e:
-            check("阿里云百炼 Key", False, f"网络错误：{e}", "检查网络/代理后重试")
+    # 基础
+    py_ok = sys.version_info >= (3, 9)
+    lines.append(f"{'✅' if py_ok else '❌'} Python ≥ 3.9  — {sys.version.split()[0]}")
+    if not py_ok:
+        lines.append("   ↳ 升级 Python：https://www.python.org/downloads/")
+    cfg_ok = CONFIG_PATH.exists()
+    lines.append(f"{'✅' if cfg_ok else '⚠️ '} config.json  — {'已创建' if cfg_ok else '还没建（cp config.example.json config.json）'}")
 
-    # 4. Monid key（零成本验证：查余额）
-    mk = (cfg.get("monid", {}).get("token") or "").strip()
-    if not mk:
-        check("Monid Key", False, "未填写（监控流水线必需）",
-              f"到 {MONID_URL} 注册并创建（monid_live_ 开头，新号送 $1 额度），填入 config.json 的 monid.token")
-    else:
-        try:
-            st, body = http("https://api.monid.ai/v1/wallet/balance",
-                            headers={"Authorization": f"Bearer {mk}"})
-            bal = json.loads(body)["balance"]["value"]
-            check("Monid Key", True, f"有效，余额 ${bal:.2f}",
-                  f"余额不足时到 https://app.monid.ai/wallet 充值（每次采集约 $0.0012）" if bal < 0.1 else None)
-        except Exception as e:
-            check("Monid Key", False, str(e)[:80], f"确认 key 正确：{MONID_URL}")
-
-    # 5. zhuceka 去水印（选填；只查是否配置，不实际调用）
-    p = cfg.get("parser", {})
-    tpl = p.get("url_template") or ""
-    check("zhuceka 去水印兜底（选填）", "uid=" in tpl and "key=" in tpl,
-          "已配置" if "uid=" in tpl else "未配置（Monid 去水印为主，这个是备用）",
-          None if "uid=" in tpl else "在 api.zhuceka.cn 注册后把 uid/key 填入 config.json 的 parser.url_template")
-
-    # 6. playwright（仅导出流水线的 Get笔记线需要）
+    # ===== 能力一：导出流水线（零 key）=====
+    lines.append("\n📦 导出流水线（博主全部历史逐字稿）——零 API key：")
+    cred = Path.home() / ".biji_exporter" / "skill_credentials.json"
+    logged = cred.exists()
+    lines.append(f"   {'✅' if logged else '⬜'} 得到大脑(Get笔记)登录 — "
+                 f"{'已登录' if logged else '未登录：python3 biji_export.py login（扫码，一次）'}")
     try:
         import playwright  # noqa
-        check("playwright（选填，Get笔记导出用）", True, "已安装")
+        pw = True
     except ImportError:
-        check("playwright（选填，Get笔记导出用）", False, "未安装（不用导出流水线可忽略）",
-              "pip3 install --user playwright && python3 -m playwright install chromium")
+        pw = False
+    if logged and not pw:
+        lines.append("   ⬜ playwright 未装（登录/自动刷新需要）：pip3 install --user playwright && python3 -m playwright install chromium")
+    lines.append("   " + ("✅ 可用" if logged else "⬜ 待登录后可用") +
+                 "：python3 run.py export-biji \"<博主名>\"")
 
-    # 7. 网络（服务器有任何响应就算可达，包括 404）
-    for name, url in (("阿里云 API 可达", "https://dashscope.aliyuncs.com"),
-                      ("Monid API 可达", "https://api.monid.ai")):
+    # ===== 能力二：监控流水线（2 个 key）=====
+    lines.append("\n📦 监控流水线（链接/盯博主 → 逐字稿+数据）——需要 2 个 key：")
+    ds = (cfg.get("dashscope", {}).get("api_key") or "").strip()
+    mk = (cfg.get("monid", {}).get("token") or "").strip()
+    if ds:
         try:
-            http(url, timeout=8)
-            check(name, True)
-        except urllib.error.HTTPError:
-            check(name, True)  # 有 HTTP 响应 = 网络通
+            http("https://dashscope.aliyuncs.com/api/v1/tasks/00000000-0000-0000-0000-000000000000",
+                 headers={"Authorization": f"Bearer {ds}"}, method="POST")
+            ds_ok, ds_msg = True, f"有效（sk-…{ds[-4:]}）"
+        except urllib.error.HTTPError as e:
+            ds_ok, ds_msg = (e.code in (400, 404)), ("有效" if e.code in (400, 404) else f"HTTP {e.code}")
         except Exception as e:
-            check(name, False, str(e)[:60], "检查网络/VPN/代理")
-
-    # 汇总
-    print("\n===== content-toolkit 自检 =====")
-    fails = 0
-    for name, ok, detail, fix in results:
-        mark = "✅" if ok else "❌"
-        line = f"{mark} {name}" + (f"  — {detail}" if detail else "")
-        print(line)
-        if not ok and fix:
-            fails += 1
-            print(f"   ↳ 修复：{fix}")
-    core_fail = sum(1 for n, ok, *_ in results if not ok and "选填" not in n and "可忽略" not in n)
-    print()
-    if core_fail == 0:
-        print("🟢 核心项全通过。快速体验：python3 run.py monitor --links \"<一条抖音视频链接>\"")
+            ds_ok, ds_msg = False, f"网络错误 {str(e)[:40]}"
     else:
-        print(f"🔴 有 {core_fail} 个核心项待解决（上面每行 ↳ 是修复方法）。解决后重跑本命令。")
-    return 1 if core_fail else 0
+        ds_ok, ds_msg = False, "未填写"
+    lines.append(f"   {'✅' if ds_ok else '⬜'} 阿里云百炼 Key（转写） — {ds_msg}")
+    if not ds_ok:
+        lines.append(f"      ↳ {DASHSCOPE_URL} 注册创建（sk- 开头，有免费额度）")
+    if mk:
+        try:
+            bal = json.loads(http("https://api.monid.ai/v1/wallet/balance",
+                                  headers={"Authorization": f"Bearer {mk}"}))["balance"]["value"]
+            mk_ok, mk_msg = True, f"有效，余额 ${bal:.2f}"
+        except Exception as e:
+            mk_ok, mk_msg = False, str(e)[:60]
+    else:
+        mk_ok, mk_msg = False, "未填写"
+    lines.append(f"   {'✅' if mk_ok else '⬜'} Monid Key（抖音数据） — {mk_msg}")
+    if not mk_ok:
+        lines.append(f"      ↳ {MONID_URL} 注册创建（monid_live_ 开头，送 $1 额度）")
+    if ds_ok and mk_ok:
+        lines.append("   ✅ 可用：python3 run.py monitor --links \"<视频链接>\"")
+    else:
+        lines.append("   ⬜ 补齐上面 key 后解锁（每个都有免费额度，注册各约 2 分钟）")
+
+    # ===== 网络 =====
+    net = reachable("https://api.monid.ai")
+    if not net:
+        lines.append("\n❌ 外网不可达 — 检查网络/VPN")
+
+    # ===== 花费台账 =====
+    total, n = cost_total(cfg)
+    if total:
+        lines.append(f"\n💰 累计 Monid 花费：${total:.4f}（{n} 次调用）")
+
+    print("\n".join(lines))
+    if not py_ok:
+        return 1
+    print("\n🟢 建议：先零 key 跑导出线体验；想要「丢链接出稿」再补两个 key。")
+    return 0
 
 
 if __name__ == "__main__":

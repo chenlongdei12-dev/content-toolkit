@@ -43,7 +43,8 @@ python3 run.py export-merge 谢胜子                               # 单独合�
 ## 核心机制（agent 必读，30 秒）
 
 - **幂等状态库**：监控流水线所有步骤读写 `<workspace>/videos.json`（阶段 collected→parsed→transcribed→merged），中断重跑零成本；导出流水线按文件名里的 post_id 去重，增量续传
-- **计费**：Monid 每次调用 $0.0012（user_posts/douyin.video 各一次/条）；阿里云按语音时长计费（约每小时音频几毛钱量级）。task_id 都会持久化，重跑不重复扣费
+- **计费**：Monid 每次调用 $0.0012（user_posts/douyin.video 各一次/条）；阿里云按语音时长计费（约每小时音频几毛钱量级）。task_id 都会持久化，重跑不重复扣费。Monid 花费自动记账在 `<workspace>/.cost_log.json`（doctor 可查累计）
+- **逐字稿复用**：config 的 `transcript_library` 指向导出线素材库时，监控线遇到库里已有的视频（按 aweme_id 匹配）直接复用 Get笔记 逐字稿，跳过转写不花钱
 - **时效**：抖音无水印直链几小时失效——parse 完尽快转写，别隔天
 - **纯 BGM 无语音的视频**转写报 `SUCCESS_WITH_NO_VALID_FRAGMENT` 属正常，跳过即可
 

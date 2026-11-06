@@ -26,8 +26,10 @@ cp config.example.json config.json
 cd scripts && python3 doctor.py
 ```
 
-按 doctor 的 ❌↳ 提示引导用户逐项解决（别替用户编 key，让用户自己注册，README 里有教程链接）。
-两个核心 key：`dashscope.api_key`（百炼 sk- 开头）、`monid.token`（monid_live_ 开头）。填完重跑 doctor 直到核心项全 ✅。
+**引导原则（重要）：MVP 优先，只引导最少的 key。**
+- 第一阶段（零 key）：doctor 会显示「导出流水线 ✅ 可用」——直接引导用户登录得到大脑（`biji_export.py login`）跑 `run.py export-biji "<博主名>"`，不需要任何 API key
+- 第二阶段（用户想要「丢链接出稿」时才提）：补 `dashscope.api_key`（百炼 sk- 开头）+ `monid.token`（monid_live_ 开头），教程链接在 doctor 输出里。别一次塞给用户一堆注册任务
+- 永远别替用户编 key；重跑 doctor 确认能力解锁
 
 ## 3. 冒烟测试（花不到 1 分钱）
 

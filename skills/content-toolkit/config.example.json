@@ -4,7 +4,10 @@
     "api_key": "",
     "base_url": "https://dashscope.aliyuncs.com",
     "model": "paraformer-v2",
-    "language_hints": ["zh", "en"],
+    "language_hints": [
+      "zh",
+      "en"
+    ],
     "poll_interval_seconds": 10,
     "max_wait_seconds": 1800
   },
@@ -27,6 +30,14 @@
     "method": "GET",
     "headers": {},
     "body": null,
-    "video_url_paths": ["data.video", "data.url", "data.video_url", "data.play_url", "url"]
-  }
+    "video_url_paths": [
+      "data.video",
+      "data.url",
+      "data.video_url",
+      "data.play_url",
+      "url"
+    ],
+    "concurrency": 3
+  },
+  "transcript_library": ""
 }
