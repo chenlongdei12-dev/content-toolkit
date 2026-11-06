@@ -10,7 +10,7 @@
 用法：
   python3 shejiao_export.py "https://www.douyin.com/user/MS4wLj..." [--count 100] [--timeout 1800]
 
-输出：~/Downloads/{达人昵称}_作品数据_YYYYMMDD.xlsx
+输出：{outdir}/{达人昵称}_作品数据_YYYYMMDD.xlsx（默认 IMS 下载/社媒助手/抖音）
 """
 import argparse
 import glob
@@ -25,7 +25,8 @@ from playwright.sync_api import sync_playwright
 CDP = "http://127.0.0.1:9222"
 EXT = "iecafjejbggeoldcjiehgoolokaebpdf"
 SIDEPANEL = f"chrome-extension://{EXT}/sidepanel.html"
-DL = os.path.expanduser("~/Downloads")
+# 默认落盘目录：与人工交互导出一致（IMS 卷挂载时），否则退回 ~/Downloads
+IMS_DL = "/Volumes/dei\u2019s IMS/dei's AI 创作中枢/下载/社媒助手/抖音"
 
 
 def find_page(ctx, pred):
@@ -38,7 +39,8 @@ def find_page(ctx, pred):
     return None
 
 
-def wait_new_xlsx(before, timeout_s=60):
+def wait_new_xlsx(before, timeout_s=60, DL=None):
+    DL = DL or globals().get("DL") or os.path.expanduser("~/Downloads")
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         cr = glob.glob(DL + "/*.crdownload")
@@ -51,39 +53,19 @@ def wait_new_xlsx(before, timeout_s=60):
     return None
 
 
-def chrome_binary():
-    """跨平台找 Chrome 可执行文件（Windows/Linux 兼容）。"""
-    import platform
-    import shutil
-    sysname = platform.system()
-    if sysname == "Windows":
-        for p in (os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
-                  os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
-                  os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe")):
-            if os.path.exists(p):
-                return p
-        return None
-    if sysname == "Darwin":
-        return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    return shutil.which("google-chrome") or shutil.which("chromium")
+def default_outdir():
+    """IMS 卷在 → 社媒助手标准目录；不在 → ~/Downloads。"""
+    if os.path.isdir(IMS_DL):
+        return IMS_DL
+    return os.path.expanduser("~/Downloads")
 
 
 def launch_instance():
-    """跨平台拉起专用 Chrome 实例（独立 user-data-dir + CDP 端口）。"""
-    import platform
     import subprocess
-    data = os.path.expanduser("~/.shejiao_automation")
-    args = [f"--user-data-dir={data}", "--remote-debugging-port=9222",
-            "--no-first-run", "--no-default-browser-check"]
-    if platform.system() == "Darwin":
-        subprocess.run(["open", "-na", "Google Chrome", "--args", *args], check=False)
-    else:
-        exe = chrome_binary()
-        if not exe:
-            sys.exit(json.dumps({"ok": False,
-                                 "error": "找不到 Google Chrome，请先安装（windows 需关闭已在运行的 Chrome 后重试）"},
-                                ensure_ascii=False))
-        subprocess.Popen([exe, *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["open", "-na", "Google Chrome", "--args",
+                    f"--user-data-dir={os.path.expanduser('~/.shejiao_automation')}",
+                    "--remote-debugging-port=9222",
+                    "--no-first-run", "--no-default-browser-check"], check=False)
 
 
 def main():
@@ -91,7 +73,10 @@ def main():
     ap.add_argument("url", help="抖音达人主页 URL")
     ap.add_argument("--count", type=int, default=0, help="导出数量，0=全部")
     ap.add_argument("--timeout", type=int, default=1800, help="采集最长等待秒数")
+    ap.add_argument("--outdir", default=None, help="xlsx 落盘目录（默认 IMS 下载/社媒助手/抖音，卷不在则 ~/Downloads）")
     args = ap.parse_args()
+    DL = args.outdir or default_outdir()
+    os.makedirs(DL, exist_ok=True)
 
     with sync_playwright() as p:
         try:
@@ -180,7 +165,7 @@ def main():
         before = set(glob.glob(DL + "/*.xls*"))
         sp.bring_to_front()
         sp.get_by_text("导出Excel数据", exact=True).first.click(timeout=8000)
-        f = wait_new_xlsx(before)
+        f = wait_new_xlsx(before, DL=DL)
         if not f:
             sys.exit(json.dumps({"ok": False, "error": "点击导出后 60 秒内没有新 xlsx 落盘"}, ensure_ascii=False))
 
