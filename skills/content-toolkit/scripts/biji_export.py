@@ -28,7 +28,7 @@ API_BASE = "https://knowledge-api.trytalks.com"
 BIJI_HOME = "https://www.biji.com/"
 REQUEST_TIMEOUT = 30
 CRED_CACHE = Path.home() / ".biji_exporter" / "skill_credentials.json"
-DEFAULT_BASE = Path.home() / "DouClaw" / "Get笔记博主知识库"  # 可被 config.json 的 biji_export_base 覆盖
+DEFAULT_BASE = Path.home() / "Downloads" / "Get笔记导出"  # 默认下载文件夹；可被 config.json 的 biji_export_base 覆盖
 
 
 def _apply_base_override():

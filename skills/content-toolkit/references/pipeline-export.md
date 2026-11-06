@@ -37,7 +37,7 @@ open -na "Google Chrome" --args --user-data-dir="$HOME/.shejiao_automation" \
 ## 数据解析与合并
 
 - social_stats.py：xlsx/csv → 统一 JSON。纯标准库读 xlsx；列名自动识别（真实文件已校准：视频描述/视频链接/点赞量/收藏量/评论量/分享量/发布时间/达人昵称）；`1.2万` 等中文数字自动换算
-- merge_export.py：标题归一化（去 #话题/标点）精确 → 相似度 ≥0.75 → 包含关系；匹配不到的如实标 ❌ 并列在 INDEX 尾部
+- merge_export.py：**链接视频ID精确匹配**（逐字稿 md 里的 douyin 链接 ↔ 数据表视频链接，同视频多稿共享）→ 标题归一化精确 → 相似度 ≥0.75 → 包含关系；匹配不到的如实标 ❌ 并列在 INDEX 尾部。实测姜Dora：链接匹配 91/110，剩 19 条全是真删稿
 
 ## 排错
 

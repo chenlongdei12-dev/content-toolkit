@@ -51,12 +51,39 @@ def wait_new_xlsx(before, timeout_s=60):
     return None
 
 
+def chrome_binary():
+    """跨平台找 Chrome 可执行文件（Windows/Linux 兼容）。"""
+    import platform
+    import shutil
+    sysname = platform.system()
+    if sysname == "Windows":
+        for p in (os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+                  os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+                  os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe")):
+            if os.path.exists(p):
+                return p
+        return None
+    if sysname == "Darwin":
+        return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    return shutil.which("google-chrome") or shutil.which("chromium")
+
+
 def launch_instance():
+    """跨平台拉起专用 Chrome 实例（独立 user-data-dir + CDP 端口）。"""
+    import platform
     import subprocess
-    subprocess.run(["open", "-na", "Google Chrome", "--args",
-                    f"--user-data-dir={os.path.expanduser('~/.shejiao_automation')}",
-                    "--remote-debugging-port=9222",
-                    "--no-first-run", "--no-default-browser-check"], check=False)
+    data = os.path.expanduser("~/.shejiao_automation")
+    args = [f"--user-data-dir={data}", "--remote-debugging-port=9222",
+            "--no-first-run", "--no-default-browser-check"]
+    if platform.system() == "Darwin":
+        subprocess.run(["open", "-na", "Google Chrome", "--args", *args], check=False)
+    else:
+        exe = chrome_binary()
+        if not exe:
+            sys.exit(json.dumps({"ok": False,
+                                 "error": "找不到 Google Chrome，请先安装（windows 需关闭已在运行的 Chrome 后重试）"},
+                                ensure_ascii=False))
+        subprocess.Popen([exe, *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():
@@ -84,12 +111,17 @@ def main():
                  {"behavior": "allow", "downloadPath": DL, "eventsEnabled": True})
         ctx = browser.contexts[0]
 
-        # 1. sidepanel 重置到干净状态（防止还停在上一任务的「处理任务」页导致找不到「开始采集」）
-        sp = find_page(ctx, lambda pg: EXT in pg.url)
-        if sp is None:
+        # 1. sidepanel：恰好保留一个标签（插件不会自己开；没有对话框就没有落点）
+        #    实测要点：已存在的标签直接用、绝不 goto 重载——重载后界面正常但「开始采集」建不起任务
+        sps = [pg for pg in ctx.pages if EXT in pg.url]
+        if not sps:
             sp = ctx.new_page()
-        sp.goto(SIDEPANEL)
-        sp.wait_for_timeout(1500)
+            sp.goto(SIDEPANEL)
+            sp.wait_for_timeout(2000)
+        else:
+            sp = sps[0]
+            for extra in sps[1:]:
+                extra.close()
 
         # 2. 打开达人主页 → 点注入面板里的「导出视频」
         dy = find_page(ctx, lambda pg: "douyin.com/user/" in pg.url) or ctx.new_page()
