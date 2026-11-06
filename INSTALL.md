@@ -4,14 +4,19 @@
 
 ## 1. 安装 skill
 
+先弄清用户的 agent 类型，把 `skills/content-toolkit` 复制到对应 skills 目录：
+
+| Agent | 安装目录 | Windows 下 |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills/` | `%USERPROFILE%\.claude\skills\` |
+| WorkBuddy | `~/.workbuddy/skills/` | `%USERPROFILE%\.workbuddy\skills\` |
+| 其他（OpenClaw/Codex 等） | 该 agent 的 skills 目录，结构不变 | 同理 |
+
 ```bash
-# 把 skills/content-toolkit 复制到用户的 agent skills 目录（Claude Code 默认）：
-mkdir -p ~/.claude/skills
-cp -r <本文件夹路径>/skills/content-toolkit ~/.claude/skills/
-# 其他 agent（OpenClaw/Codex 等）放到对应的 skills 目录，结构不变。
+mkdir -p ~/.claude/skills && cp -r <本文件夹路径>/skills/content-toolkit ~/.claude/skills/
 ```
 
-只需 Python ≥3.9（macOS 自带）；监控流水线零第三方依赖。
+只需 Python ≥3.9（macOS 自带；Windows 从 python.org 装，勾选 **Add python.exe to PATH**，命令用 `python` 而非 `python3`）；监控流水线零第三方依赖。
 
 ## 2. 创建配置并自检
 

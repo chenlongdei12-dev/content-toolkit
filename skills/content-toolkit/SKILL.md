@@ -58,6 +58,13 @@ python3 run.py export-merge 谢胜子                               # 单独合�
 | 社媒数据匹配率低 | 看 INDEX 尾部未匹配清单；标题差异大时调 merge_export.py 阈值 |
 | 更多 | `references/pipeline-*.md` 各有排错章节 |
 
+## 首次使用约定（agent 行为）
+
+1. **首次跑导出流水线前问用户一次**：「导出的素材想放哪个文件夹？回车默认用下载文件夹（~/Downloads/Get笔记导出）」。用户回答后把路径写进 config.json 的 `biji_export_base`（相对路径转绝对）。不问第二次。
+2. **首次跑监控流水线**不需要问任何东西（默认 `~/VideoMonitor`，在 config.workspace 可改）。
+3. 用户环境可能是 macOS 或 **Windows**：所有脚本纯 Python 标准库跨平台；社媒助手自动化的 Chrome 拉起已兼容 Windows（需已装 Chrome）；差异只有安装路径（见 INSTALL.md）。
+4. 用户用的是 Claude Code 还是 WorkBuddy 还是别的 agent 都行——skill 目录结构一致，装到各自的 skills 目录即可（Claude Code `~/.claude/skills/`，WorkBuddy `~/.workbuddy/skills/`）。
+
 ## 其他内容类型
 
 公众号/图片/聊天记录/直播回放等 10 类内容的采集方法见 `references/methodology.md`（用户问「某类内容怎么采集」时先查它）。
