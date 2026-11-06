@@ -1,0 +1,32 @@
+{
+  "workspace": "~/VideoMonitor",
+  "dashscope": {
+    "api_key": "",
+    "base_url": "https://dashscope.aliyuncs.com",
+    "model": "paraformer-v2",
+    "language_hints": ["zh", "en"],
+    "poll_interval_seconds": 10,
+    "max_wait_seconds": 1800
+  },
+  "monid": {
+    "enabled": true,
+    "api_base": "https://api.monid.ai",
+    "token": "",
+    "watch_sec_user_ids": [],
+    "provider": "anyapi",
+    "user_posts_endpoint": "/douyin.user_posts",
+    "limit": 20,
+    "sort": "newest",
+    "field_map": null
+  },
+  "parser": {
+    "mode": "auto",
+    "provider": "anyapi",
+    "video_endpoint": "/douyin.video",
+    "url_template": "",
+    "method": "GET",
+    "headers": {},
+    "body": null,
+    "video_url_paths": ["data.video", "data.url", "data.video_url", "data.play_url", "url"]
+  }
+}
